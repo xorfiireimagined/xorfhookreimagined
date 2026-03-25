@@ -4,12 +4,13 @@ local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 
--- Default settings (will be overridden by GUI)
+-- Settings (read from GUI)
 getgenv().Aimbot = getgenv().Aimbot or false
 getgenv().Smoothness = getgenv().Smoothness or 1
 getgenv().FOV = getgenv().FOV or 180
+getgenv().ShowFOVCircle = getgenv().ShowFOVCircle or false  -- NEW!
 
--- FOV circle
+-- FOV circle setup
 local circle = Drawing.new("Circle")
 circle.Thickness = 2
 circle.Visible = false
@@ -44,8 +45,8 @@ local function get_target()
 end
 
 rs.RenderStepped:Connect(function()
-    -- Update circle based on toggle
-    circle.Visible = getgenv().Aimbot and true or false
+    -- Update circle visibility based on BOTH Aimbot AND ShowFOVCircle toggles
+    circle.Visible = (getgenv().Aimbot or getgenv().ShowFOVCircle) and true or false
     circle.Radius = getgenv().FOV or 180
     circle.Position = uis:GetMouseLocation()
 
@@ -68,4 +69,4 @@ rs.RenderStepped:Connect(function()
     end
 end)
 
-print("[Xorfhook] Aimbot loaded - Use GUI to toggle")
+print("[Xorfhook] Aimbot loaded")
