@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 
 getgenv().animid = "92281817840531"
-getgenv().speed = 1
+getgenv().animspeed = 1
 getgenv().doAnimation = false
 
 local function anim2track(asset_id)
