@@ -4,16 +4,19 @@ local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 
--- config
+-- Global Settings
 getgenv().Aimbot = false
 getgenv().showCircle = false
-getgenv().Smoothness = 1
+getgenv().Smoothness = 0.25 -- Lower = Smoother for cross-executor compatibility
 getgenv().FOV = 180
 
--- fov circle setup
+-- Universal Mouse Mover Check
+local mousemove = mousemoverel or (Input and Input.MouseMove) or (mouse_move_relative)
+
+-- FOV Circle setup
 local circle = Drawing.new("Circle")
 circle.Thickness = 2
-circle.Visible = getgenv().showCircle
+circle.Visible = false
 circle.Color = Color3.fromRGB(255, 50, 50)
 circle.Transparency = 0.5
 
@@ -24,7 +27,7 @@ local function get_target()
 
     for _, v in pairs(plrs:GetPlayers()) do
         if v ~= lp and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-            
+            -- Added HeadHB for Rivals compatibility
             local part = v.Character:FindFirstChild("HeadHB") or v.Character:FindFirstChild("Head") or v.Character:FindFirstChild("UpperTorso")
             
             if part then
@@ -44,25 +47,31 @@ local function get_target()
     return target
 end
 
--- main loop
+-- Main Loop
 rs.RenderStepped:Connect(function()
-    -- Updated logic: Visible only if Aimbot is on AND showCircle is true
     circle.Visible = getgenv().Aimbot and getgenv().showCircle
     circle.Radius = getgenv().FOV
     circle.Position = uis:GetMouseLocation()
 
-    if uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) and getgenv().Aimbot then 
+    if getgenv().Aimbot and uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
         local target = get_target()
         
         if target then
             local pos, _ = cam:WorldToViewportPoint(target.Position)
             local mouse_loc = uis:GetMouseLocation()
             
-            local x = (pos.X - mouse_loc.X) * getgenv().Smoothness
-            local y = (pos.Y - mouse_loc.Y) * getgenv().Smoothness
+            -- Smoothness calculation that works better on Level 8 executors
+            -- We use math.floor to prevent "Sub-pixel" errors that crash some executors
+            local x = math.floor((pos.X - mouse_loc.X) * getgenv().Smoothness)
+            local y = math.floor((pos.Y - mouse_loc.Y) * getgenv().Smoothness)
             
-            if mousemoverel then
-                mousemoverel(x, y)
+            if mousemove then
+                -- Standard Aimbot
+                mousemove(x, y)
+            else
+                -- Fallback for executors without mousemoverel (CFrame Aimbot)
+                -- This is slower but works on EVERYTHING
+                cam.CFrame = CFrame.new(cam.CFrame.Position, target.Position)
             end
         end
     end
