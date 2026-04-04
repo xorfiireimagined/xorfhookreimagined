@@ -4,22 +4,38 @@ local uis = game:GetService("UserInputService")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 
--- Global Settings
-getgenv().Aimbot = false
-getgenv().showCircle = false
-getgenv().Smoothness = 0.25 -- Lower = Smoother for cross-executor compatibility
-getgenv().FOV = 180
+-- [[ CONFIGURATION ]] --
+getgenv().Aimbot = true
+getgenv().WallCheck = true
+getgenv().Smoothness = 0.15 -- 0.1 to 1 (Lower is smoother/legit, 1 is instant)
+getgenv().FOV = 150
+getgenv().showCircle = true
 
--- Universal Mouse Mover Check
-local mousemove = mousemoverel or (Input and Input.MouseMove) or (mouse_move_relative)
-
--- FOV Circle setup
+-- [[ FOV CIRCLE SETUP ]] --
 local circle = Drawing.new("Circle")
 circle.Thickness = 2
-circle.Visible = false
-circle.Color = Color3.fromRGB(255, 50, 50)
+circle.NumSides = 64
+circle.Radius = getgenv().FOV
+circle.Visible = getgenv().showCircle
+circle.Color = Color3.fromRGB(255, 255, 255)
 circle.Transparency = 0.5
 
+-- [[ VISIBILITY CHECK (WALL CHECK) ]] --
+local function is_visible(target_part)
+    local origin = cam.CFrame.Position
+    local direction = (target_part.Position - origin).Unit * (target_part.Position - origin).Magnitude
+    
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {lp.Character, cam}
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local result = workspace:Raycast(origin, direction, params)
+    
+    -- Returns true if nothing is in the way, or if the hit object belongs to the target
+    return not result or result.Instance:IsDescendantOf(target_part.Parent)
+end
+
+-- [[ TARGETING LOGIC ]] --
 local function get_target()
     local target = nil
     local dist = getgenv().FOV
@@ -27,7 +43,8 @@ local function get_target()
 
     for _, v in pairs(plrs:GetPlayers()) do
         if v ~= lp and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-            -- Added HeadHB for Rivals compatibility
+            
+            -- Checks for Rivals HeadHB or standard character parts
             local part = v.Character:FindFirstChild("HeadHB") or v.Character:FindFirstChild("Head") or v.Character:FindFirstChild("UpperTorso")
             
             if part then
@@ -37,8 +54,11 @@ local function get_target()
                     local mag = (Vector2.new(pos.X, pos.Y) - mouse).Magnitude
                     
                     if mag < dist then
-                        dist = mag
-                        target = part
+                        -- Check visibility if WallCheck is enabled
+                        if not getgenv().WallCheck or is_visible(part) then
+                            dist = mag
+                            target = part
+                        end
                     end
                 end
             end
@@ -47,12 +67,14 @@ local function get_target()
     return target
 end
 
--- Main Loop
+-- [[ MAIN LOOP ]] --
 rs.RenderStepped:Connect(function()
+    -- Update FOV Circle
     circle.Visible = getgenv().Aimbot and getgenv().showCircle
     circle.Radius = getgenv().FOV
     circle.Position = uis:GetMouseLocation()
 
+    -- Aimbot Execution (Holding Right Click)
     if getgenv().Aimbot and uis:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
         local target = get_target()
         
@@ -60,18 +82,13 @@ rs.RenderStepped:Connect(function()
             local pos, _ = cam:WorldToViewportPoint(target.Position)
             local mouse_loc = uis:GetMouseLocation()
             
-            -- Smoothness calculation that works better on Level 8 executors
-            -- We use math.floor to prevent "Sub-pixel" errors that crash some executors
-            local x = math.floor((pos.X - mouse_loc.X) * getgenv().Smoothness)
-            local y = math.floor((pos.Y - mouse_loc.Y) * getgenv().Smoothness)
+            -- Smooth relative movement
+            local x = (pos.X - mouse_loc.X) * getgenv().Smoothness
+            local y = (pos.Y - mouse_loc.Y) * getgenv().Smoothness
             
-            if mousemove then
-                -- Standard Aimbot
-                mousemove(x, y)
-            else
-                -- Fallback for executors without mousemoverel (CFrame Aimbot)
-                -- This is slower but works on EVERYTHING
-                cam.CFrame = CFrame.new(cam.CFrame.Position, target.Position)
+            -- Xeno supports mousemoverel perfectly
+            if mousemoverel then
+                mousemoverel(x, y)
             end
         end
     end
