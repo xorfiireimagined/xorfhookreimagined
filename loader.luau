@@ -1,8 +1,3 @@
--- prevent double loading
-if getgenv().XorfhookLoaded then
-    return
-end
-
 getgenv().XorfhookLoaded = true
 
 local loaderURL = "https://raw.githubusercontent.com/xorfiireimagined/xorfhookreimagined/refs/heads/main/loader.luau"
