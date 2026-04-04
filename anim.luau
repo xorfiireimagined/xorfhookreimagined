@@ -6,59 +6,49 @@ getgenv().animspeed = 1
 getgenv().doAnimation = false
 
 local function anim2track(asset_id)
-    local objs = game:GetObjects(asset_id)
-    for i = 1, #objs do
-        if objs[i]:IsA("Animation") then
-            return objs[i].AnimationId
+    local success, objs = pcall(function() return game:GetObjects(asset_id) end)
+    if success and objs then
+        for i = 1, #objs do
+            if objs[i]:IsA("Animation") then
+                return objs[i].AnimationId
+            end
         end
     end
     return asset_id
 end
 
--- Setup Animation Object
-if not animid:find("rbxassetid://") then
-    animid = "rbxassetid://" .. animid
-end
-
-animid = anim2track(animid)
-local animation = Instance.new("Animation")
-animation.AnimationId = animid
-
 local function playAnim(character)
-    -- Check the variable BEFORE running any logic
-    if not getgenv().doAnimation then 
-        return 
-    end
+    if not getgenv().doAnimation then return end
 
     local Hum = character:FindFirstChildWhichIsA("Humanoid")
     if not Hum then return end
 
-    -- Stop existing tracks
-    for _, track in next, Hum:GetPlayingAnimationTracks() do
-        track:Stop()
-    end
+    -- Handle playing on a separate thread to prevent recursion crash
+    task.spawn(function()
+        -- Stop existing tracks
+        for _, track in next, Hum:GetPlayingAnimationTracks() do
+            track:Stop()
+        end
 
-    local anim = Hum:LoadAnimation(animation)
-    anim.Priority = Enum.AnimationPriority.Action4
-    anim:Play()
-    anim:AdjustSpeed(getgenv().speed)
+        local animation = Instance.new("Animation")
+        animation.AnimationId = anim2track("rbxassetid://" .. getgenv().animid:gsub("rbxassetid://", ""))
+        
+        local anim = Hum:LoadAnimation(animation)
+        anim.Priority = Enum.AnimationPriority.Action4
+        anim:Play()
+        -- Fixed: changed 'speed' to 'animspeed' to match your UI [cite: 25]
+        anim:AdjustSpeed(getgenv().animspeed or 1)
 
-    -- Loop logic
-    anim.Stopped:Connect(function()
-        -- Re-check variable before looping
+        -- Wait for animation to finish OR for the toggle to be turned off
+        repeat task.wait(0.1) until not anim.IsPlaying or not getgenv().doAnimation
+        
         if getgenv().doAnimation then
             playAnim(character)
+        else
+            anim:Stop()
         end
     end)
 end
 
--- Listen for Character Respawns
-Player.CharacterAdded:Connect(function(character)
-    character:WaitForChild("Humanoid")
-    playAnim(character)
-end)
-
--- Initial Run
-if Player.Character then
-    playAnim(Player.Character)
-end
+Player.CharacterAdded:Connect(playAnim)
+if Player.Character then playAnim(Player.Character) end
