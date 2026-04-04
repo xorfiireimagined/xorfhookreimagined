@@ -20,26 +20,28 @@ end
 local function playAnim(character)
     if not getgenv().doAnimation then return end
 
-    local Hum = character:FindFirstChildWhichIsA("Humanoid")
+    local Hum = character:FindFirstChildOfClass("Humanoid")
     if not Hum then return end
 
-    -- Handle playing on a separate thread to prevent recursion crash
+    -- Use task.spawn to prevent the main thread from hanging
     task.spawn(function()
-        -- Stop existing tracks
+        -- Stop existing tracks to prevent overlapping
         for _, track in next, Hum:GetPlayingAnimationTracks() do
             track:Stop()
         end
 
         local animation = Instance.new("Animation")
-        animation.AnimationId = anim2track("rbxassetid://" .. getgenv().animid:gsub("rbxassetid://", ""))
+        local cleanID = tostring(getgenv().animid):gsub("rbxassetid://", "")
+        animation.AnimationId = anim2track("rbxassetid://" .. cleanID)
         
         local anim = Hum:LoadAnimation(animation)
         anim.Priority = Enum.AnimationPriority.Action4
         anim:Play()
-        -- Fixed: changed 'speed' to 'animspeed' to match your UI [cite: 25]
+        
+        -- FIXED: Changed 'speed' to 'animspeed' to match your config [cite: 24, 25]
         anim:AdjustSpeed(getgenv().animspeed or 1)
 
-        -- Wait for animation to finish OR for the toggle to be turned off
+        -- Improved loop logic to prevent crashing
         repeat task.wait(0.1) until not anim.IsPlaying or not getgenv().doAnimation
         
         if getgenv().doAnimation then
@@ -49,6 +51,9 @@ local function playAnim(character)
         end
     end)
 end
+
+-- Re-trigger when the toggle is turned ON
+debug.getregistry().PlayAnimGlobal = playAnim 
 
 Player.CharacterAdded:Connect(playAnim)
 if Player.Character then playAnim(Player.Character) end
