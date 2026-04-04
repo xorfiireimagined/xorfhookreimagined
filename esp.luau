@@ -2,7 +2,7 @@
 getgenv().ESP = {
     Enabled = false,
     Dynamic = false,
-    UpdateRate = 1,
+    UpdateRate = 1, -- 0 = every frame, 1 = every 2nd frame, etc.
     
     -- Individual toggles
     Names = false,
@@ -15,13 +15,14 @@ getgenv().ESP = {
     MaxDistance = 500,
     Color = Color3.fromRGB(255, 50, 50),
     
-    -- Internal storage (not needed in UI)
+    -- Internal storage
     Objects = {},
     Cache = {
         Square = {},
         Text = {},
         Line = {}
-    }
+    },
+    LastUpdate = 0
 }
 
 -- Services
@@ -30,18 +31,9 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Drawing cache functions
+-- Drawing functions
 local function GetDrawing(type)
-    local cache = getgenv().ESP.Cache[type]
-    if #cache > 0 then
-        return table.remove(cache)
-    end
     return Drawing.new(type)
-end
-
-local function ReturnDrawing(obj, type)
-    obj.Visible = false
-    table.insert(getgenv().ESP.Cache[type], obj)
 end
 
 -- Create ESP for player
@@ -97,13 +89,15 @@ local function CreateESP(player)
     
     getgenv().ESP.Objects[player] = objects
     
-    -- Cleanup
+    -- Improved Cleanup logic to prevent memory leaks [cite: 7]
     player.AncestryChanged:Connect(function()
         if not player:IsDescendantOf(game) then
-            for _, obj in pairs(objects) do
-                if obj then obj:Remove() end
+            if getgenv().ESP.Objects[player] then
+                for _, obj in pairs(getgenv().ESP.Objects[player]) do
+                    if obj then obj:Remove() end
+                end
+                getgenv().ESP.Objects[player] = nil
             end
-            getgenv().ESP.Objects[player] = nil
         end
     end)
 end
@@ -112,6 +106,7 @@ end
 local function UpdateESP()
     local ESP = getgenv().ESP
     
+    -- Optimization: If disabled, hide all and exit early [cite: 8]
     if not ESP.Enabled then
         for _, objects in pairs(ESP.Objects) do
             for _, obj in pairs(objects) do
@@ -121,8 +116,8 @@ local function UpdateESP()
         return
     end
     
-    -- Frame skip for performance
-    ESP.LastUpdate = (ESP.LastUpdate or 0) + 1
+    -- Frame skip for performance (fixes the "stuttering" feel) [cite: 9]
+    ESP.LastUpdate = ESP.LastUpdate + 1
     if ESP.UpdateRate > 0 and ESP.LastUpdate % (ESP.UpdateRate + 1) ~= 0 then
         return
     end
@@ -134,57 +129,50 @@ local function UpdateESP()
     for player, objects in pairs(ESP.Objects) do
         local character = player.Character
         
+        -- Hide if no character [cite: 10]
         if not character then
-            for _, obj in pairs(objects) do
-                if obj then obj.Visible = false end
-            end
+            for _, obj in pairs(objects) do if obj then obj.Visible = false end end
             continue
         end
         
         local humanoid = character:FindFirstChild("Humanoid")
         local rootPart = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso")
         
+        -- Hide if dead [cite: 11]
         if not humanoid or not rootPart or humanoid.Health <= 0 then
-            for _, obj in pairs(objects) do
-                if obj then obj.Visible = false end
-            end
+            for _, obj in pairs(objects) do if obj then obj.Visible = false end end
             continue
         end
         
-        -- Distance check
+        -- Distance check [cite: 12]
         local distance = (rootPart.Position - cameraPos).Magnitude
         if distance > ESP.MaxDistance then
-            for _, obj in pairs(objects) do
-                if obj then obj.Visible = false end
-            end
+            for _, obj in pairs(objects) do if obj then obj.Visible = false end end
             continue
         end
         
-        -- World to screen
+        -- World to screen [cite: 13]
         local pos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
         if not onScreen then
-            for _, obj in pairs(objects) do
-                if obj then obj.Visible = false end
-            end
+            for _, obj in pairs(objects) do if obj then obj.Visible = false end end
             continue
         end
         
-        -- Calculate box
+        -- Calculate box sizing [cite: 14]
         local scale = math.clamp(1000 / distance, 10, 100)
         local boxWidth = scale
         local boxHeight = scale * 1.8
         local boxX = pos.X - boxWidth / 2
         local boxY = pos.Y - boxHeight / 2
-        
         local color = ESP.Color
         
-        -- Box
+        -- Render Box [cite: 15]
         objects.Box.Size = Vector2.new(boxWidth, boxHeight)
         objects.Box.Position = Vector2.new(boxX, boxY)
         objects.Box.Color = color
         objects.Box.Visible = true
         
-        -- Name
+        -- Render Name [cite: 16]
         if ESP.Names then
             objects.Name.Text = player.Name
             objects.Name.Position = Vector2.new(pos.X, boxY - 15)
@@ -194,21 +182,20 @@ local function UpdateESP()
             objects.Name.Visible = false
         end
         
-        -- Health Bar
+        -- Render Health Bar [cite: 17, 18, 19]
         if ESP.HealthBar then
-            local healthPercent = humanoid.Health / humanoid.MaxHealth
+            local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
             local barWidth = 4
             local barHeight = boxHeight
-            local barX = boxX - barWidth - 2
-            local barY = boxY
+            local barX = boxX - barWidth - 4
             
             objects.HealthBarBG.Size = Vector2.new(barWidth, barHeight)
-            objects.HealthBarBG.Position = Vector2.new(barX, barY)
+            objects.HealthBarBG.Position = Vector2.new(barX, boxY)
             objects.HealthBarBG.Visible = true
             
             local healthHeight = barHeight * healthPercent
             objects.HealthBar.Size = Vector2.new(barWidth, healthHeight)
-            objects.HealthBar.Position = Vector2.new(barX, barY + (barHeight - healthHeight))
+            objects.HealthBar.Position = Vector2.new(barX, boxY + (barHeight - healthHeight))
             objects.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
             objects.HealthBar.Visible = true
         else
@@ -216,17 +203,16 @@ local function UpdateESP()
             objects.HealthBarBG.Visible = false
         end
         
-        -- Health Text
+        -- Render Health Text [cite: 20]
         if ESP.HealthText then
             objects.HealthText.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
             objects.HealthText.Position = Vector2.new(pos.X, boxY + boxHeight + 2)
-            objects.HealthText.Color = Color3.fromRGB(255, 255, 255)
             objects.HealthText.Visible = true
         else
             objects.HealthText.Visible = false
         end
         
-        -- Tracers
+        -- Render Tracers [cite: 21]
         if ESP.Tracers then
             objects.Tracer.From = screenCenter
             objects.Tracer.To = Vector2.new(pos.X, boxY + boxHeight)
@@ -236,11 +222,10 @@ local function UpdateESP()
             objects.Tracer.Visible = false
         end
         
-        -- Distance
+        -- Render Distance [cite: 22, 23]
         if ESP.Distance then
             objects.Distance.Text = math.floor(distance) .. "m"
             objects.Distance.Position = Vector2.new(pos.X, boxY + boxHeight + (ESP.HealthText and 15 or 2))
-            objects.Distance.Color = Color3.fromRGB(200, 200, 200)
             objects.Distance.Visible = true
         else
             objects.Distance.Visible = false
@@ -248,11 +233,11 @@ local function UpdateESP()
     end
 end
 
--- Initialize
+-- Initialize for existing and new players
 for _, player in pairs(Players:GetPlayers()) do
-    CreateESP(player)
+    task.spawn(CreateESP, player)
 end
 Players.PlayerAdded:Connect(CreateESP)
 
--- Start loop
+-- Start the main loop
 RunService.RenderStepped:Connect(UpdateESP)
