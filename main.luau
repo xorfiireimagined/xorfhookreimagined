@@ -2400,6 +2400,314 @@ game:GetService("RunService").Heartbeat:Connect(function()
     end
 end)
 
+-- [[ GUN TP SETTINGS ]] --
+getgenv().GunTPEnabled = false
+getgenv().GunTPTarget = "None"
+getgenv().GunTPHeight = 10 -- How high above their head the bullets spawn
+
+-- Helper to get fresh player list
+local function GetPlayerList()
+    local tbl = {"None"}
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= game:GetService("Players").LocalPlayer then
+            table.insert(tbl, v.Name)
+        end
+    end
+    return tbl
+end
+
+local RageGroup = Tabs.Character:AddLeftGroupbox('Rage: Gun Manipulation')
+
+-- Dropdown to choose the victim
+local TargetDrop = RageGroup:AddDropdown('GunTPTargetDrop', {
+    Values = GetPlayerList(),
+    Default = 1,
+    Multi = false,
+    Text = 'Select Gun TP Target',
+    Callback = function(Value) getgenv().GunTPTarget = Value end
+})
+
+-- Refresh button so the dropdown stays updated
+RageGroup:AddButton('Refresh Player List', function()
+    TargetDrop:SetValues(GetPlayerList())
+end)
+
+RageGroup:AddToggle('GunTPToggle', {
+    Text = 'Invisible Wallbang (Gun TP)',
+    Default = false,
+    Callback = function(Value) getgenv().GunTPEnabled = Value end
+})
+
+RageGroup:AddSlider('GunTPHeightSlider', {
+    Text = 'Bullet Origin Height',
+    Default = 10, Min = 2, Max = 30, Rounding = 0,
+    Callback = function(Value) getgenv().GunTPHeight = Value end
+})
+
+-- [[ THE HEARTBEAT LOOP FOR METHOD 1 (Floating Tool) ]] --
+game:GetService("RunService").Heartbeat:Connect(function()
+    if getgenv().GunTPEnabled and getgenv().GunTPTarget ~= "None" then
+        local TargetObj = game:GetService("Players"):FindFirstChild(getgenv().GunTPTarget)
+        local MyChar = game:GetService("Players").LocalPlayer.Character
+        local Tool = MyChar and MyChar:FindFirstChildOfClass("Tool")
+
+        if TargetObj and TargetObj.Character and Tool then
+            local TargetHead = TargetObj.Character:FindFirstChild("Head")
+            local Handle = Tool:FindFirstChild("Handle") or Tool:FindFirstChildOfClass("Part")
+            
+            if TargetHead and Handle then
+                -- Teleports just the gun/handle above the specific player selected
+                Handle.CFrame = TargetHead.CFrame * CFrame.new(0, getgenv().GunTPHeight, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                
+                -- Anti-Gravity for the tool so it doesn't fall
+                if Handle:IsA("BasePart") then
+                    Handle.Velocity = Vector3.new(0, 0, 0)
+                    Handle.RotVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end
+    end
+end)
+
+-- [[ DAGGER AURA SETTINGS ]] --
+getgenv().DaggerAuraEnabled = false
+getgenv().DaggerTarget = "None"
+
+local RageMeleeGroup = Tabs.Character:AddLeftGroupbox('Rage: Melee Aura')
+
+-- 1. Helper function to get fresh names
+local function UpdatePlayerList()
+    local p = {"None"}
+    for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+        if v ~= game:GetService("Players").LocalPlayer then
+            table.insert(p, v.Name)
+        end
+    end
+    return p
+end
+
+-- 2. The Dropdown
+local MeleeTargetDrop = RageMeleeGroup:AddDropdown('MeleeTarget', {
+    Values = UpdatePlayerList(),
+    Default = 1,
+    Text = 'Melee Target',
+    Callback = function(v) getgenv().DaggerTarget = v end
+})
+
+-- 3. THE REFRESH BUTTON (The missing piece!)
+RageMeleeGroup:AddButton('Refresh Player List', function()
+    local newList = UpdatePlayerList()
+    Options.MeleeTarget:SetValues(newList) -- This forces Linoria to update the UI
+    Library:Notify("Player list updated!")
+end)
+
+RageMeleeGroup:AddDivider()
+
+RageMeleeGroup:AddToggle('DaggerAura', {
+    Text = 'Dagger Kill Aura',
+    Default = false,
+    Callback = function(v) getgenv().DaggerAuraEnabled = v end
+})
+
+-- 4. The "Blink" Feature (For extra rage)
+RageMeleeGroup:AddButton('Blink Behind Target', function()
+    local target = game.Players:FindFirstChild(getgenv().DaggerTarget)
+    local lp = game.Players.LocalPlayer
+    if target and target.Character and lp.Character then
+        local root = lp.Character:FindFirstChild("HumanoidRootPart")
+        local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if root and tRoot then
+            -- Teleports you 3 studs behind them facing their back
+            root.CFrame = tRoot.CFrame * CFrame.new(0, 0, 3) 
+            Library:Notify("Blinked to " .. target.Name)
+        end
+    end
+end)
+
+-- [[ BLINK RAGE - FULL INTEGRATED WITH AUTO-TARGET ]] --
+local UIS = game:GetService("UserInputService")
+local plrs = game:GetService("Players")
+local RS = game:GetService("RunService")
+local lp = plrs.LocalPlayer
+local cam = workspace.CurrentCamera
+
+-- Global settings
+getgenv().BlinkDelay = 0.1
+getgenv().BlinkAttackDivisor = 2.5
+getgenv().BlinkOffsetX = 0
+getgenv().BlinkOffsetY = 0.5
+getgenv().BlinkOffsetZ = 3
+getgenv().BlinkTarget = "None"
+getgenv().AutoTargetBlink = false -- Toggle for auto-detect
+
+UIS.InputBegan:Connect(function(input, gp)
+    if input.KeyCode == Enum.KeyCode.P then
+        local victimPart = nil
+        
+        -- 1. AUTO-DETECTION LOGIC
+        if getgenv().AutoTargetBlink then
+            local closestTarget = nil
+            local shortestDistance = getgenv().FOV or 180 -- Uses your Aimbot FOV radius
+
+            for _, player in pairs(plrs:GetPlayers()) do
+                if player ~= lp and player.Character and player.Character:FindFirstChild("Humanoid") then
+                    local head = player.Character:FindFirstChild("HeadHB") or player.Character:FindFirstChild("Head")
+                    if head then
+                        local pos, onScreen = cam:WorldToViewportPoint(head.Position)
+                        if onScreen then
+                            local magnitude = (Vector2.new(pos.X, pos.Y) - (cam.ViewportSize / 2)).Magnitude
+                            if magnitude < shortestDistance then
+                                closestTarget = head
+                                shortestDistance = magnitude
+                            end
+                        end
+                    end
+                end
+            end
+            victimPart = closestTarget
+        end
+
+        -- 2. MANUAL FALLBACK (Dropdown or Mouse)
+        if not victimPart then
+            if getgenv().BlinkTarget and getgenv().BlinkTarget ~= "None" then
+                local p = plrs:FindFirstChild(getgenv().BlinkTarget)
+                victimPart = p and p.Character and (p.Character:FindFirstChild("HeadHB") or p.Character:FindFirstChild("Head"))
+            end
+        end
+        
+        if not victimPart then
+            local mouse = lp:GetMouse()
+            local target = mouse.Target
+            if target and target.Parent and target.Parent:FindFirstChild("Humanoid") then
+                victimPart = target.Parent:FindFirstChild("HeadHB") or target.Parent:FindFirstChild("Head")
+            end
+        end
+
+        -- 3. EXECUTION
+        if victimPart and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local myRoot = lp.Character.HumanoidRootPart
+            local tRoot = victimPart.Parent:FindFirstChild("HumanoidRootPart")
+            if not tRoot then return end
+
+            local oldCF = myRoot.CFrame
+            local isLocking = true
+            
+            -- Camera Lock Loop (Hard Lock to Head)
+            local cameraConnection = RS.RenderStepped:Connect(function()
+                if isLocking and victimPart and victimPart.Parent then
+                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, victimPart.Position)
+                end
+            end)
+
+            -- Teleport Logic
+            local behindPos = tRoot.CFrame * CFrame.new(getgenv().BlinkOffsetX, getgenv().BlinkOffsetY, getgenv().BlinkOffsetZ)
+            myRoot.CFrame = CFrame.lookAt(behindPos.Position, tRoot.Position)
+
+            -- Timing Logic
+            local totalTime = getgenv().BlinkDelay
+            local waitBeforeAttack = totalTime / getgenv().BlinkAttackDivisor
+            local waitAfterAttack = totalTime - waitBeforeAttack
+
+            task.wait(waitBeforeAttack)
+            mouse1press()
+            task.wait(waitAfterAttack)
+            mouse1release()
+
+            -- Cleanup
+            isLocking = false
+            cameraConnection:Disconnect()
+            myRoot.CFrame = oldCF
+        end
+    end
+end)
+
+-- [[ UI ELEMENTS ]] --
+local BlinkGroup = Tabs.Main:AddRightGroupbox('Rage v1')
+
+BlinkGroup:AddToggle('AutoBlinkTarget', {
+    Text = 'Auto-Target Closest',
+    Default = false,
+    Callback = function(V) getgenv().AutoTargetBlink = V end
+})
+
+local PlayerDropdown = BlinkGroup:AddDropdown('BlinkTargetSelector', {
+    Text = 'Blink Target',
+    Default = 'None',
+    Values = { 'None' },
+    Callback = function(Value) getgenv().BlinkTarget = Value end
+})
+
+task.spawn(function()
+    while task.wait(1) do
+        local PlayerList = { "None" }
+        for _, player in pairs(plrs:GetPlayers()) do
+            if player ~= lp then table.insert(PlayerList, player.Name) end
+        end
+        PlayerDropdown:SetValues(PlayerList)
+    end
+end)
+
+BlinkGroup:AddSlider('BlinkDelay', {
+    Text = 'Total Blink Duration',
+    Default = 0.1, Min = 0.01, Max = 0.5, Rounding = 2,
+    Callback = function(V) getgenv().BlinkDelay = V end
+})
+
+BlinkGroup:AddSlider('BlinkDivisor', {
+    Text = 'Attack Timing',
+    Default = 2.5, Min = 1.1, Max = 5, Rounding = 1,
+    Callback = function(V) getgenv().BlinkAttackDivisor = V end
+})
+
+BlinkGroup:AddSlider('BlinkOffX', {
+    Text = 'Side Offset',
+    Default = 0, Min = -5, Max = 5, Rounding = 1,
+    Callback = function(V) getgenv().BlinkOffsetX = V end
+})
+
+BlinkGroup:AddSlider('BlinkOffY', {
+    Text = 'Height Offset',
+    Default = 0.5, Min = -2, Max = 5, Rounding = 1,
+    Callback = function(V) getgenv().BlinkOffsetY = V end
+})
+
+BlinkGroup:AddSlider('BlinkOffZ', {
+    Text = 'Distance Behind',
+    Default = 3, Min = 1, Max = 10, Rounding = 1,
+    Callback = function(V) getgenv().BlinkOffsetZ = V end
+})
+
+-- [[ ANTI-AIM / HEAD HIDER ]] --
+local AAGroup = Tabs.Main:AddLeftGroupbox('Anti-Aim')
+
+AAGroup:AddToggle('AAToggle', {
+    Text = 'Enable Anti-Aim',
+    Default = false,
+    Callback = function(V) getgenv().AntiAimEnabled = V end
+})
+
+AAGroup:AddDropdown('AAMode', {
+    Text = 'AA Mode',
+    Default = 'Down',
+    Values = { 'Down', 'Spin', 'Back' },
+    Callback = function(V) getgenv().AntiAimMode = V end
+})
+
+RS.Stepped:Connect(function()
+    if getgenv().AntiAimEnabled and lp.Character then
+        local neck = lp.Character:FindFirstChild("Neck", true)
+        if neck then
+            if getgenv().AntiAimMode == "Down" then
+                neck.C0 = CFrame.new(neck.C0.Position) * CFrame.Angles(math.rad(-110), 0, math.rad(180))
+            elseif getgenv().AntiAimMode == "Spin" then
+                neck.C0 = CFrame.new(neck.C0.Position) * CFrame.Angles(0, math.rad(tick() * 1500 % 360), 0)
+            elseif getgenv().AntiAimMode == "Back" then
+                neck.C0 = CFrame.new(neck.C0.Position) * CFrame.Angles(math.rad(110), 0, 0)
+            end
+        end
+    end
+end)
+
 ThemeManager:SetLibrary(Library)
 
 SaveManager:SetLibrary(Library)
