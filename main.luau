@@ -2524,31 +2524,52 @@ RageMeleeGroup:AddButton('Blink Behind Target', function()
     end
 end)
 
--- [[ BLINK RAGE - FULL INTEGRATED WITH AUTO-TARGET ]] --
+-- [[ XORFHOOK RAGE V1 | INTEGRATED GHOST BLINK ]] --
 local UIS = game:GetService("UserInputService")
 local plrs = game:GetService("Players")
 local RS = game:GetService("RunService")
 local lp = plrs.LocalPlayer
 local cam = workspace.CurrentCamera
 
--- Global settings
+-- [[ SETTINGS ]] --
 getgenv().BlinkDelay = 0.1
 getgenv().BlinkAttackDivisor = 2.5
 getgenv().BlinkOffsetX = 0
 getgenv().BlinkOffsetY = 0.5
 getgenv().BlinkOffsetZ = 3
 getgenv().BlinkTarget = "None"
-getgenv().AutoTargetBlink = false -- Toggle for auto-detect
+getgenv().AutoTargetBlink = false
+getgenv().GhostHideEnabled = false -- Toggle this via UI
+getgenv().IsBlinking = false       -- Internal flag
 
+-- [[ 1. THE GHOST HIDE ENGINE ]] --
+-- This loop runs forever in the background
+task.spawn(function()
+    while task.wait() do 
+        if getgenv().GhostHideEnabled and not getgenv().IsBlinking then
+            pcall(function()
+                local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    -- Randomizes slightly around -500 to stay unhittable
+                    hrp.CFrame = CFrame.new(hrp.Position.X + math.random(-2,2), -500, hrp.Position.Z + math.random(-2,2))
+                end
+            end)
+        end
+    end
+end)
+
+-- [[ 2. THE BLINK STRIKE LOGIC ]] --
 UIS.InputBegan:Connect(function(input, gp)
-    if input.KeyCode == Enum.KeyCode.P then
+    if not gp and input.KeyCode == Enum.KeyCode.P then
+        -- PAUSE VOID HIDE
+        getgenv().IsBlinking = true 
+        
         local victimPart = nil
         
-        -- 1. AUTO-DETECTION LOGIC
+        -- Auto-Target Detection
         if getgenv().AutoTargetBlink then
             local closestTarget = nil
-            local shortestDistance = getgenv().FOV or 180 -- Uses your Aimbot FOV radius
-
+            local shortestDistance = getgenv().FOV or 180 
             for _, player in pairs(plrs:GetPlayers()) do
                 if player ~= lp and player.Character and player.Character:FindFirstChild("Humanoid") then
                     local head = player.Character:FindFirstChild("HeadHB") or player.Character:FindFirstChild("Head")
@@ -2567,14 +2588,13 @@ UIS.InputBegan:Connect(function(input, gp)
             victimPart = closestTarget
         end
 
-        -- 2. MANUAL FALLBACK (Dropdown or Mouse)
-        if not victimPart then
-            if getgenv().BlinkTarget and getgenv().BlinkTarget ~= "None" then
-                local p = plrs:FindFirstChild(getgenv().BlinkTarget)
-                victimPart = p and p.Character and (p.Character:FindFirstChild("HeadHB") or p.Character:FindFirstChild("Head"))
-            end
+        -- Dropdown Fallback
+        if not victimPart and getgenv().BlinkTarget ~= "None" then
+            local p = plrs:FindFirstChild(getgenv().BlinkTarget)
+            victimPart = p and p.Character and (p.Character:FindFirstChild("HeadHB") or p.Character:FindFirstChild("Head"))
         end
         
+        -- Mouse Fallback
         if not victimPart then
             local mouse = lp:GetMouse()
             local target = mouse.Target
@@ -2583,41 +2603,41 @@ UIS.InputBegan:Connect(function(input, gp)
             end
         end
 
-        -- 3. EXECUTION
-        if victimPart and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            local myRoot = lp.Character.HumanoidRootPart
+        -- Execution
+        local myRoot = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if victimPart and myRoot then
             local tRoot = victimPart.Parent:FindFirstChild("HumanoidRootPart")
-            if not tRoot then return end
+            if tRoot then
+                local oldCF = myRoot.CFrame
+                local isLocking = true
+                
+                -- Camera Lock
+                local cameraConnection = RS.RenderStepped:Connect(function()
+                    if isLocking and victimPart and victimPart.Parent then
+                        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, victimPart.Position)
+                    end
+                end)
 
-            local oldCF = myRoot.CFrame
-            local isLocking = true
-            
-            -- Camera Lock Loop (Hard Lock to Head)
-            local cameraConnection = RS.RenderStepped:Connect(function()
-                if isLocking and victimPart and victimPart.Parent then
-                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, victimPart.Position)
-                end
-            end)
+                -- Snap to Target
+                local behindPos = tRoot.CFrame * CFrame.new(getgenv().BlinkOffsetX, getgenv().BlinkOffsetY, getgenv().BlinkOffsetZ)
+                myRoot.CFrame = CFrame.lookAt(behindPos.Position, tRoot.Position)
 
-            -- Teleport Logic
-            local behindPos = tRoot.CFrame * CFrame.new(getgenv().BlinkOffsetX, getgenv().BlinkOffsetY, getgenv().BlinkOffsetZ)
-            myRoot.CFrame = CFrame.lookAt(behindPos.Position, tRoot.Position)
+                -- Attack Sequence
+                local totalTime = getgenv().BlinkDelay
+                task.wait(totalTime / getgenv().BlinkAttackDivisor)
+                mouse1press()
+                task.wait(totalTime - (totalTime / getgenv().BlinkAttackDivisor))
+                mouse1release()
 
-            -- Timing Logic
-            local totalTime = getgenv().BlinkDelay
-            local waitBeforeAttack = totalTime / getgenv().BlinkAttackDivisor
-            local waitAfterAttack = totalTime - waitBeforeAttack
-
-            task.wait(waitBeforeAttack)
-            mouse1press()
-            task.wait(waitAfterAttack)
-            mouse1release()
-
-            -- Cleanup
-            isLocking = false
-            cameraConnection:Disconnect()
-            myRoot.CFrame = oldCF
+                -- Clean up and return
+                isLocking = false
+                cameraConnection:Disconnect()
+                myRoot.CFrame = oldCF
+            end
         end
+        
+        -- RESUME VOID HIDE
+        getgenv().IsBlinking = false 
     end
 end)
 
