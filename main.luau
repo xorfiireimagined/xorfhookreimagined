@@ -2755,38 +2755,37 @@ SettingsTab:AddToggle('AutoLoadToggle', {
     end
 })
 
--- [[ SELF VOID-FLICKER (ANTI-HIT) ]] --
-getgenv().SelfVoidEnabled = false
+-- [[ INDEPENDENT VOID SPAM / GHOST HIDE ]] --
+getgenv().GhostHideEnabled = false
+getgenv().IsBlinking = false -- Connect this to your 'P' key script
 
 task.spawn(function()
-    while task.wait(0.01) do -- Maximum speed
-        if getgenv().SelfVoidEnabled and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = lp.Character.HumanoidRootPart
-            local originalCF = hrp.CFrame
-            
-            -- 1. FLICKER TO VOID
-            local randomX = math.random(-5000, 5000)
-            local randomY = math.random(-2000, -1000)
-            local randomZ = math.random(-5000, 5000)
-            
-            hrp.CFrame = CFrame.new(randomX, randomY, randomZ)
-            
-            -- 2. WAIT A TINY BIT
-            RS.RenderStepped:Wait()
-            
-            -- 3. SNAP BACK (Optional: stay in void unless P is pressed)
-            -- If you want to be TRULY unhittable, we only snap you back when you aren't attacking
-            hrp.CFrame = originalCF
+    while task.wait() do -- Fast loop for absolute stay
+        if getgenv().GhostHideEnabled and not getgenv().IsBlinking then
+            pcall(function()
+                local char = game:GetService("Players").LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if hrp then
+                    -- Randomizes coordinates slightly around -500 to stay unhittable
+                    local x = hrp.Position.X + math.random(-5, 5)
+                    local z = hrp.Position.Z + math.random(-5, 5)
+                    local y = -500
+                    
+                    hrp.CFrame = CFrame.new(x, y, z)
+                end
+            end)
         end
     end
 end)
 
-BlinkGroup:AddToggle('VoidSpamToggle', {
+-- [[ UI TOGGLE ]] --
+BlinkGroup:AddToggle('GhostHideToggle', {
     Text = 'Void Spam',
     Default = false,
-    Tooltip = 'Continuously teleports everyone under the map.',
+    Tooltip = 'Teleports YOU to -500 rapidly. Pauses when you blink.',
     Callback = function(Value)
-        getgenv().SelfVoidEnabled = Value
+        getgenv().GhostHideEnabled = Value
     end
 })
 
