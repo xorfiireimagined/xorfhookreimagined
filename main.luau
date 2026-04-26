@@ -2708,6 +2708,53 @@ RS.Stepped:Connect(function()
     end
 end)
 
+-- [[ AUTO-LOADER SYSTEM ]] --
+local UIS = game:GetService("UserInputService")
+local plrs = game:GetService("Players")
+local lp = plrs.LocalPlayer
+
+-- The script to be queued (Your Loader URL)
+local loaderScript = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/xorfiireimagined/xorfhookreimagined/refs/heads/main/loader.luau"))()'
+
+-- Function to handle the queue logic
+local function QueueScript()
+    if getgenv().AutoLoadEnabled then
+        local success, err = pcall(function()
+            if queue_on_teleport then
+                queue_on_teleport(loaderScript)
+            elseif syn and syn.queue_on_teleport then
+                syn.queue_on_teleport(loaderScript)
+            elseif fluxus and fluxus.queue_on_teleport then
+                fluxus.queue_on_teleport(loaderScript)
+            end
+        end)
+        if success then 
+            print("[Xorfhook] Teleport Queue Armed.") 
+        end
+    end
+end
+
+-- Watch for teleports (Matches starting/ending)
+lp.OnTeleport:Connect(QueueScript)
+
+-- [[ UI TOGGLE ]] --
+local SettingsTab = Tabs.Settings:AddLeftGroupbox('Script Management')
+
+SettingsTab:AddToggle('AutoLoadToggle', {
+    Text = 'Auto-Load on Match',
+    Default = false,
+    Tooltip = 'Automatically re-loads Xorfhook when you join a match or return to lobby.',
+    Callback = function(Value)
+        getgenv().AutoLoadEnabled = Value
+        if Value then
+            QueueScript() -- Arm it immediately if they turn it on
+            print("[Xorfhook] Auto-Load Enabled")
+        else
+            print("[Xorfhook] Auto-Load Disabled")
+        end
+    end
+})
+
 ThemeManager:SetLibrary(Library)
 
 SaveManager:SetLibrary(Library)
