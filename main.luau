@@ -2755,6 +2755,41 @@ SettingsTab:AddToggle('AutoLoadToggle', {
     end
 })
 
+-- [[ SELF VOID-FLICKER (ANTI-HIT) ]] --
+getgenv().SelfVoidEnabled = false
+
+task.spawn(function()
+    while task.wait(0.01) do -- Maximum speed
+        if getgenv().SelfVoidEnabled and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = lp.Character.HumanoidRootPart
+            local originalCF = hrp.CFrame
+            
+            -- 1. FLICKER TO VOID
+            local randomX = math.random(-5000, 5000)
+            local randomY = math.random(-2000, -1000)
+            local randomZ = math.random(-5000, 5000)
+            
+            hrp.CFrame = CFrame.new(randomX, randomY, randomZ)
+            
+            -- 2. WAIT A TINY BIT
+            RS.RenderStepped:Wait()
+            
+            -- 3. SNAP BACK (Optional: stay in void unless P is pressed)
+            -- If you want to be TRULY unhittable, we only snap you back when you aren't attacking
+            hrp.CFrame = originalCF
+        end
+    end
+end)
+
+BlinkGroup:AddToggle('VoidSpamToggle', {
+    Text = 'Void Spam',
+    Default = false,
+    Tooltip = 'Continuously teleports everyone under the map.',
+    Callback = function(Value)
+        getgenv().SelfVoidEnabled = Value
+    end
+})
+
 ThemeManager:SetLibrary(Library)
 
 SaveManager:SetLibrary(Library)
